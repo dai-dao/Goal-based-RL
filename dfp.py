@@ -1,3 +1,9 @@
+import sys
+try:
+    sys.path.remove('/home/dai/.local/lib/python3.6/site-packages')
+except:
+    pass
+
 import torch
 from torch.autograd import Variable
 import torch.nn as nn
@@ -25,8 +31,6 @@ class DFP(nn.Module):
         self.h_expectation = nn.Linear(256, action_size * self.num_offsets * self.num_measurements)
         self.h_advantages = nn.Linear(256, action_size * self.num_offsets * self.num_measurements)
         
-        # Training
-        self.loss_fn = nn.MSELoss()
 
     def forward(self, observation, measurement, goals, temp):
         observation_flatten = observation.view(observation.size()[0], -1)
@@ -39,36 +43,19 @@ class DFP(nn.Module):
         
         expectations = self.h_expectation(h_)
         advantages = self.h_advantages(h_)
-        advantages = advantages - advantages.mean(1).expand_as(advantages)
+        advantages = advantages - advantages.mean(1).repeat(1, advantages.size()[1])
         
         predictions = expectations + advantages
         predictions = predictions.view(-1, self.num_measurements, self.action_size, self.num_offsets)
         
-        boltzman = F.softmax(predictions.mean(3) / temp)
-        boltzman = boltzman.squeeze(3)
+        boltzman = F.softmax(predictions.sum(3) / temp)
+        # boltzman = boltzman.squeeze(3)
 
+        return boltzman, predictions
+
+        '''
         b = torch.mm(goals, boltzman[0])
         c = b.sum(1)
         action = torch.multinomial(c, 1)
-
         return boltzman, predictions, action
-    
-    def compute_loss(self, observation, measurement, goals,
-                     temp, action_onehot, target, optimizer):
-        boltzman, predictions, _ = self(observation, measurement, goals, temp)
-        action_resize = action_onehot.view(-1, 1, self.action_size, 1)
-        action_resize = action_resize.repeat(1, 2, 1, 6)
-        # Select the predictions relevant to the chosen actions
-        pred_action = (predictions * action_resize).sum(2)
-        
-        loss = self.loss_fn(pred_action, target)
-        entropy = -(boltzman * torch.log(boltzman + 1e-7)).sum()
-        total_loss = loss # + entropy
-        
-        # Backward and optimize step
-        optimizer.zero_grad()
-        total_loss.backward()
-        torch.nn.utils.clip_grad_norm(self.parameters(), 40.0)
-        optimizer.step()
-
-        return loss, entropy
+        '''

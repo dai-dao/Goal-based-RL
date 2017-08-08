@@ -1,11 +1,14 @@
-from __future__ import print_function
+import sys
+try:
+    sys.path.remove('/home/dai/.local/lib/python3.6/site-packages')
+except:
+    pass
 
 import argparse
 import os
-import sys
 
 import torch.multiprocessing as mp
-from train import Trainer
+from train import train_worker
 from dfp import DFP
 from gridworld_goals import *
 import torch
@@ -15,12 +18,12 @@ parser.add_argument('--lr', type=float, default=1e-3, metavar='LR',
                     help='learning rate (default: 1e-3)')
 parser.add_argument('--seed', type=int, default=1, metavar='S',
                     help='random seed (default: 1)')
-parser.add_argument('--num-processes', type=int, default=2, metavar='N',
-                    help='how many training processes to use (default: 2)')
+parser.add_argument('--num-processes', type=int, default=1, metavar='N',
+                    help='how many training processes to use (default: 4)')
 parser.add_argument('--num-step', type=int, default=100, metavar='NS',
                     help='number of forward steps in A3C (default: 100)')
-parser.add_argument('--num-episodes', type=int, default=6000, 
-                    help='Number of episodes to run training (default: 6000)')
+parser.add_argument('--num-episodes', type=int, default=10000, 
+                    help='Number of episodes to run training (default: 10000)')
 parser.add_argument('--batch-size', type=int, default=128,
                     help='Batch size for training (default: 128)')
 
@@ -39,11 +42,15 @@ if __name__ == '__main__':
     # Make sure each worker updates the same model
     # Make sure each worker has their own separate optimizers
     shared_model.share_memory()
+    processes = []
+    print('Number of processes', args.num_processes)
 
+    train_worker(0, args, offsets, a_size, shared_model)
+    '''
     for rank in range(0, args.num_processes):
-        trainer = Trainer(rank, args, offsets, a_size, shared_model)
-        p = mp.Process(target=trainer.work())
+        p = mp.Process(target=train_worker, args=(rank, args, offsets, a_size, shared_model))
         p.start()
         processes.append(p)
     for p in processes:
         p.join()
+    '''
